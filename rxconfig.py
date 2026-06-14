@@ -10,12 +10,24 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 # Persistence: SQLite for local dev, Postgres-ready for production.
-# Set DATABASE_URL (e.g. postgresql://user:pass@host:5432/db) to override.
-DB_URL = os.environ.get("DATABASE_URL", "sqlite:///reflex.db")
+# Set DATABASE_URL (e.g. postgres://user:pass@host:5432/db) to override. Fly's
+# managed Postgres hands out `postgres://…`; SQLAlchemy needs an explicit driver,
+# so normalize to the psycopg (v3) dialect.
+def _db_url() -> str:
+    url = os.environ.get("DATABASE_URL", "sqlite:///reflex.db")
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+DB_URL = _db_url()
 
 config = rx.Config(
     app_name="reflex_app",
     db_url=DB_URL,
+    # psycopg v3 is async-capable, so it serves both sync and async engines.
+    async_db_url=DB_URL if DB_URL.startswith("postgresql") else None,
     plugins=[
         rx.plugins.SitemapPlugin(),
         rx.plugins.TailwindV4Plugin(),

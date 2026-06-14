@@ -1,0 +1,22 @@
+# Build artifacts & local state — regenerated in-image or not needed at runtime.
+.venv/
+.web/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Local dev DB and uploaded/generated media (prod uses Postgres + a Fly volume).
+reflex.db
+uploaded_files/
+
+# Secrets — provided via Fly secrets, never baked into the image.
+.env
+
+# VCS, tests, docs, misc.
+.git/
+.gitignore
+tests/
+*.png
+*.md
+.nvmrc
+.claude/

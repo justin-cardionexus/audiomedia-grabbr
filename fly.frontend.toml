@@ -1,0 +1,19 @@
+# Presentation tier — static SPA served by nginx.
+# REFLEX_API_URL is passed as a Docker --build-arg at deploy time (see deploy.sh).
+app = "audiomedia-frontend"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile.frontend"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  # Static assets — fine to scale to zero between requests.
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -1,0 +1,41 @@
+# Reflex frontend (presentation tier): static SPA from `reflex export
+# --frontend-only`, served by nginx. The backend URL is baked in at build time.
+
+# ---- builder: python + node compile the static SPA ----
+FROM python:3.12-slim AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    REFLEX_ENV_MODE=prod \
+    REFLEX_TELEMETRY_ENABLED=false \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg unzip \
+ && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY rxconfig.py ./
+COPY reflex_app ./reflex_app
+COPY assets ./assets
+
+# Backend URL the SPA will talk to (baked into env.json at export time).
+ARG REFLEX_API_URL=http://localhost:8000
+ARG REFLEX_DEPLOY_URL=http://localhost:3000
+ENV REFLEX_API_URL=$REFLEX_API_URL \
+    REFLEX_DEPLOY_URL=$REFLEX_DEPLOY_URL
+
+RUN uv run --no-sync reflex export --frontend-only --no-zip
+
+# ---- runtime: nginx serves the static build ----
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/.web/build/client /usr/share/nginx/html
+EXPOSE 80

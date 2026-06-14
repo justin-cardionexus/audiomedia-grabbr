@@ -1,0 +1,39 @@
+# Reflex backend (web/server tier): Python app run as `reflex run --backend-only`.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    REFLEX_ENV_MODE=prod \
+    REFLEX_TELEMETRY_ENABLED=false \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+
+WORKDIR /app
+
+# System deps:
+#  - libgomp1: OpenMP runtime required by ctranslate2 (faster-whisper)
+#  - Node 22: reflex needs it to compile the app
+# ffmpeg is NOT needed — imageio-ffmpeg bundles a static binary.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg unzip libgomp1 \
+ && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+# Dependencies first (cached layer).
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+# Application source.
+COPY rxconfig.py alembic.ini entrypoint.sh ./
+COPY reflex_app ./reflex_app
+COPY alembic ./alembic
+COPY assets ./assets
+COPY scripts ./scripts
+RUN chmod +x entrypoint.sh
+
+# Pre-compile the app at build time so container start doesn't recompile.
+RUN uv run --no-sync reflex export --backend-only --no-zip
+
+EXPOSE 8000
+ENTRYPOINT ["./entrypoint.sh"]
