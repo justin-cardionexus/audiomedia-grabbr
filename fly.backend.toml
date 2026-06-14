@@ -21,7 +21,7 @@ primary_region = "syd"
 
 # Secrets set via `fly secrets set` (see deploy.sh): ANTHROPIC_API_KEY,
 # PEXELS_API_KEY, PIXABAY_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-# and DATABASE_URL (injected by `fly mpg attach`).
+# and DATABASE_URL (injected by `fly postgres attach`).
 
 [http_service]
   internal_port = 8000

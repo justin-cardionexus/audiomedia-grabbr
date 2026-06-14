@@ -4,14 +4,14 @@ This app deploys as **three tiers** on Fly.io:
 
 | Tier | Fly app | What it is |
 |---|---|---|
-| **Database** | Managed Postgres `audiomedia-db` | Fly Managed Postgres; injects `DATABASE_URL` into the backend. |
+| **Database** | Fly Postgres `audiomedia-db` | Legacy Fly Postgres (a Fly app); injects `DATABASE_URL` into the backend. |
 | **Web / backend** | `audiomedia-backend` | Reflex Python backend (`reflex run --backend-only`). Serves the websocket/event API, uploaded audio + rendered videos, and the Google OAuth routes. |
 | **Presentation / frontend** | `audiomedia-frontend` | Static SPA from `reflex export --frontend-only`, served by nginx. |
 
 ```
 browser ──https──▶ audiomedia-frontend (nginx, static SPA)
    │                     │ (backend URL baked in at build time)
-   └──wss / https──▶ audiomedia-backend (Reflex) ──▶ Managed Postgres
+   └──wss / https──▶ audiomedia-backend (Reflex) ──▶ Fly Postgres
                           │
                           └── /data volume: uploaded audio, rendered .mp4, Whisper model cache
 ```
@@ -39,7 +39,7 @@ media from the backend origin.
 ./deploy.sh
 ```
 
-Defaults: prefix `audiomedia`, region `syd`, Managed Postgres, a 10 GB volume.
+Defaults: prefix `audiomedia`, region `syd`, legacy Fly Postgres, a 10 GB volume.
 Override via env vars:
 
 ```bash
@@ -52,8 +52,9 @@ The script is **idempotent** — re-run it any time to redeploy.
 
 1. Preflight: checks `flyctl`, login, and that `.env` exists.
 2. Creates the two apps if missing (`audiomedia-backend`, `audiomedia-frontend`).
-3. **Managed Postgres**: creates cluster `audiomedia-db` if missing, then
-   `fly mpg attach` → injects `DATABASE_URL` as a backend secret.
+3. **Postgres**: creates a legacy Fly Postgres app `audiomedia-db` if missing
+   (`fly postgres create`), then `fly postgres attach` → injects `DATABASE_URL`
+   as a backend secret.
 4. **Volume**: creates `audiomedia_data` (mounted at `/data`) on the backend.
 5. **Secrets**: stages the keys from `.env` onto the backend
    (`fly secrets set --stage`).
@@ -136,10 +137,14 @@ Secrets (never in toml): `ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY
 
 ## Troubleshooting
 
-- **`fly mpg …` flag errors**: the Managed-Postgres CLI surface varies by flyctl
-  version. Run the step manually (`fly mpg create …`, `fly mpg attach …`), or fall
-  back to legacy `fly postgres create` + `fly postgres attach`. Either way the goal
+- **`fly postgres create` prompts/flag errors**: the legacy Postgres CLI surface
+  varies by flyctl version. If the non-interactive flags differ, run
+  `fly postgres create --name audiomedia-db --region <region>` interactively, then
+  `fly postgres attach audiomedia-db --app audiomedia-backend`. Either way the goal
   is a `DATABASE_URL` secret on the backend.
+- **Postgres operations**: legacy Fly Postgres is a normal Fly app you operate —
+  e.g. `fly postgres connect -a audiomedia-db`, and back it up yourself
+  (it is not a managed/HA offering).
 - **Backend OOM during transcription/render**: bump memory in `fly.backend.toml`
   `[[vm]] memory` (whisper + moviepy want headroom).
 - **First transcription is slow**: the Whisper model downloads to `/data/hf-cache`

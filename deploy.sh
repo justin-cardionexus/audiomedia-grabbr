@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Deploy AudioMedia to Fly.io as 3 tiers: Managed Postgres + backend + frontend.
+# Deploy AudioMedia to Fly.io as 3 tiers: Fly Postgres (legacy) + backend + frontend.
 # Idempotent: safe to re-run for repeated deployments.
 #
 # Overridable via env: PREFIX, REGION, VOLUME_SIZE, ENV_FILE, ORG.
@@ -38,16 +38,18 @@ for app in "$BACKEND" "$FRONTEND"; do
   fi
 done
 
-# --- 2. Managed Postgres (create if missing) + attach --------------------
-if "$FLY" mpg list 2>/dev/null | grep -q "$DB_CLUSTER"; then
-  log "Managed Postgres '$DB_CLUSTER' already exists"
+# --- 2. Postgres (legacy Fly Postgres app) — create if missing + attach ---
+# Legacy Fly Postgres is itself a Fly app, so reuse the app-existence check.
+if app_exists "$DB_CLUSTER"; then
+  log "Postgres '$DB_CLUSTER' already exists"
 else
-  log "Creating Managed Postgres '$DB_CLUSTER' in $REGION"
-  # NOTE: `fly mpg` flags can vary by flyctl version; adjust if this errors.
-  "$FLY" mpg create --name "$DB_CLUSTER" --region "$REGION" $ORG_ARG
+  log "Creating legacy Fly Postgres '$DB_CLUSTER' in $REGION"
+  # Flags make it non-interactive; bump sizes for production workloads.
+  "$FLY" postgres create --name "$DB_CLUSTER" --region "$REGION" $ORG_ARG \
+    --initial-cluster-size 1 --vm-size shared-cpu-1x --volume-size 1
 fi
 log "Attaching Postgres to $BACKEND (injects DATABASE_URL secret)"
-"$FLY" mpg attach "$DB_CLUSTER" --app "$BACKEND" || \
+"$FLY" postgres attach "$DB_CLUSTER" --app "$BACKEND" --yes || \
   echo "   (attach reported an issue — it may already be attached; continuing)"
 
 # --- 3. Persistent volume (create if missing) ----------------------------
