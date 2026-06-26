@@ -27,7 +27,8 @@ media from the backend origin.
 - [`flyctl`](https://fly.io/docs/flyctl/install/) installed and logged in: `fly auth login`
 - A local **`.env`** (copy from `.env.example`) containing at least:
   - `ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`
-  - optional: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `HF_TOKEN`
+  - optional: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `HF_TOKEN`,
+    `SMTP_HOSTNAME`/`SMTP_USERNAME`/`SMTP_PASSWORD` (passwordless email sign-in)
   - `DATABASE_URL` is **not** needed here — Fly injects it when Postgres is attached.
 - Docker is **not** required locally; Fly builds the images remotely.
 
@@ -131,7 +132,9 @@ Set in `fly.backend.toml` `[env]` (and overridden per-`PREFIX` by `deploy.sh`):
 | `BACKEND_URL` / `FRONTEND_URL` / `GOOGLE_REDIRECT_URI` | backend/frontend URLs | Google OAuth flow |
 
 Secrets (never in toml): `ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DATABASE_URL` (auto via attach).
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`SMTP_HOSTNAME`/`SMTP_USERNAME`/`SMTP_PASSWORD` (+ optional `SMTP_PORT`/`SMTP_FROM`/`SMTP_STARTTLS`),
+`DATABASE_URL` (auto via attach).
 
 ---
 

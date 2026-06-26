@@ -46,6 +46,33 @@ def google_enabled() -> bool:
     return bool(google_client_id() and google_client_secret())
 
 
+# --- Passwordless email sign-in (SMTP) ---
+def smtp_hostname() -> str | None:
+    return os.environ.get("SMTP_HOSTNAME") or None
+
+
+def smtp_username() -> str | None:
+    return os.environ.get("SMTP_USERNAME") or None
+
+
+def smtp_password() -> str | None:
+    return os.environ.get("SMTP_PASSWORD") or None
+
+
+def smtp_from() -> str:
+    return os.environ.get("SMTP_FROM") or (smtp_username() or "")
+
+
+def smtp_enabled() -> bool:
+    return bool(smtp_hostname() and smtp_username() and smtp_password())
+
+
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() != "false"
+# How long an emailed magic link stays valid.
+MAGIC_LINK_TTL_MINUTES = int(os.environ.get("MAGIC_LINK_TTL_MINUTES", "15"))
+
+
 # --- Transcription ---
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL_SIZE", "base")
 

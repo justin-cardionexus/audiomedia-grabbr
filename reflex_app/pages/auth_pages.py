@@ -7,6 +7,7 @@ import reflex_local_auth
 from reflex_local_auth.pages.login import login_form
 
 from .. import config
+from ..state.auth_state import MagicLinkState
 
 
 def login_page() -> rx.Component:
@@ -37,12 +38,58 @@ def login_page() -> rx.Component:
                         width="100%",
                     ),
                     google_button,
+                    _magic_link_form(),
                     spacing="4",
                     width="100%",
                 ),
             ),
         ),
         padding_top="10vh",
+    )
+
+
+def _magic_link_form() -> rx.Component:
+    """Passwordless email sign-in — shown only when SMTP is configured."""
+    return rx.cond(
+        MagicLinkState.smtp_enabled,
+        rx.cond(
+            MagicLinkState.sent,
+            rx.callout(
+                "Check your inbox for a sign-in link.",
+                icon="mail_check",
+                color_scheme="green",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.cond(
+                    MagicLinkState.error != "",
+                    rx.callout(
+                        MagicLinkState.error,
+                        icon="triangle_alert",
+                        color_scheme="red",
+                        width="100%",
+                    ),
+                ),
+                rx.input(
+                    placeholder="you@example.com",
+                    type="email",
+                    value=MagicLinkState.email,
+                    on_change=MagicLinkState.set_email,
+                    width="100%",
+                ),
+                rx.button(
+                    rx.icon("mail", size=16),
+                    "Email me a sign-in link",
+                    on_click=MagicLinkState.request_link,
+                    loading=MagicLinkState.sending,
+                    width="100%",
+                    variant="surface",
+                    size="3",
+                ),
+                spacing="2",
+                width="100%",
+            ),
+        ),
     )
 
 

@@ -65,7 +65,8 @@ log "Staging backend secrets from $ENV_FILE"
 set -a; . "./$ENV_FILE"; set +a
 SECRETS=()
 for key in ANTHROPIC_API_KEY PEXELS_API_KEY PIXABAY_API_KEY \
-           GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET HF_TOKEN; do
+           GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET HF_TOKEN \
+           SMTP_HOSTNAME SMTP_USERNAME SMTP_PASSWORD SMTP_PORT SMTP_FROM SMTP_STARTTLS; do
   val="${!key:-}"
   [ -n "$val" ] && SECRETS+=("$key=$val")
 done

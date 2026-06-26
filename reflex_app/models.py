@@ -72,3 +72,17 @@ class MediaResult(rx.Model, table=True):
     width: int = 0
     height: int = 0
     attribution: str = ""
+
+
+class MagicLinkToken(rx.Model, table=True):
+    """A single-use, short-lived token backing a passwordless email sign-in.
+
+    Only the SHA-256 hash of the token is stored; the raw token lives solely in
+    the emailed link.
+    """
+
+    email: str = sqlmodel.Field(index=True)
+    token_hash: str = sqlmodel.Field(index=True)
+    expiration: datetime.datetime
+    used: bool = False
+    created_at: datetime.datetime = sqlmodel.Field(default_factory=_utcnow)

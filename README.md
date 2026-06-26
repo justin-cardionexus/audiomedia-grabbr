@@ -48,8 +48,9 @@ slice of the timeline, with the original audio as the soundtrack.
   **Download** button.
 - **Per-user projects** — dashboard of your runs; each project persists its
   transcript, segments, matched media, and rendered video.
-- **Authentication** — username/password ([`reflex-local-auth`](https://pypi.org/project/reflex-local-auth/))
-  plus an optional **"Sign in with Google"** OAuth flow.
+- **Authentication** — username/password ([`reflex-local-auth`](https://pypi.org/project/reflex-local-auth/)),
+  an optional **"Sign in with Google"** OAuth flow, and optional **passwordless
+  sign-in** via an emailed magic link (SMTP).
 - **Delete errored runs** from the dashboard.
 - **Tests** — a `pytest` suite for the core logic.
 - **Deployable** — 3-tier Fly.io setup (see [DEPLOY.md](DEPLOY.md)).
@@ -123,6 +124,7 @@ Copy `.env.example` → `.env` and fill in:
 | `PEXELS_API_KEY` | ✅ | Stock media search ([pexels.com/api](https://www.pexels.com/api/)) |
 | `PIXABAY_API_KEY` | ✅ | Stock media search ([pixabay.com/api/docs](https://pixabay.com/api/docs/)) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | Enables "Sign in with Google" |
+| `SMTP_HOSTNAME` / `SMTP_USERNAME` / `SMTP_PASSWORD` | — | Enables passwordless magic-link sign-in (optional `SMTP_PORT`/`SMTP_FROM`/`SMTP_STARTTLS`) |
 | `HF_TOKEN` | — | Silences the Hugging Face download notice / raises rate limits |
 | `WHISPER_MODEL_SIZE` | — | `tiny`/`base`/`small`/`medium`/`large-v3` (default `base`) |
 | `DATABASE_URL` | — | Postgres URL for production (defaults to local SQLite) |
