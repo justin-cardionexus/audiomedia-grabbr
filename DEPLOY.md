@@ -69,6 +69,37 @@ The script is **idempotent** — re-run it any time to redeploy.
 
 ---
 
+## Custom domains (optional)
+
+To serve the app on your own domains instead of the `*.fly.dev` URLs:
+
+1. Create **CNAME** DNS records pointing your domains at the fly.dev URLs, e.g.
+   `app.example.com → audiomedia-frontend.fly.dev` and
+   `api.example.com → audiomedia-backend.fly.dev`.
+2. Set them in `.env` (read by `deploy.sh`, not the app) — bare host or full URL:
+   ```bash
+   FRONTEND_DOMAIN=app.example.com
+   BACKEND_DOMAIN=api.example.com
+   ```
+3. `./deploy.sh` — it then:
+   - runs `fly certs add` for each custom domain (Fly auto-validates via your DNS);
+   - sets `REFLEX_DEPLOY_URL`, app `FRONTEND_URL`/`BACKEND_URL`, and
+     `GOOGLE_REDIRECT_URI` to the custom domains;
+   - sets `REFLEX_CORS_ALLOWED_ORIGINS` to **both** the custom and fly.dev frontend
+     origins (so the app works loaded from either).
+
+**How traffic flows:** the browser SPA always connects to the **fly.dev backend**
+(`REFLEX_API_URL`, baked at build — always has a valid cert, no race). The custom
+**backend** domain is used for branded **OAuth redirects + magic-link URLs** only.
+So a not-yet-issued custom cert can't break the live app's websocket.
+
+Watch cert issuance: `fly certs show app.example.com --app audiomedia-frontend`.
+Preview the resolved wiring without deploying: `PRINT_ONLY=1 ./deploy.sh`.
+
+Leave `FRONTEND_DOMAIN`/`BACKEND_DOMAIN` unset to keep using the fly.dev URLs.
+
+---
+
 ## First-time post-deploy steps
 
 ### Google sign-in (optional)
@@ -78,6 +109,10 @@ redirect URI** to your Google OAuth client (Google Cloud Console → Credentials
 ```
 https://audiomedia-backend.fly.dev/auth/google/callback
 ```
+
+If you set a custom `BACKEND_DOMAIN`, use that host instead (e.g.
+`https://api.example.com/auth/google/callback`). `deploy.sh` prints the exact
+value to register. (Magic-link sign-in needs no provider config.)
 
 ### Seed a QA user (optional)
 The database starts empty — register a user in the UI, or seed the QA account:
@@ -120,16 +155,20 @@ Just re-run `./deploy.sh`. Notes:
 
 ## Configuration reference
 
-Set in `fly.backend.toml` `[env]` (and overridden per-`PREFIX` by `deploy.sh`):
+Set in `fly.backend.toml` `[env]` (overridden by `deploy.sh` per `PREFIX` and
+custom domains). The values below are the fly.dev defaults:
 
 | Variable | Value | Why |
 |---|---|---|
-| `REFLEX_API_URL` | `https://audiomedia-backend.fly.dev` | Backend origin the SPA + uploads use |
-| `REFLEX_DEPLOY_URL` | `https://audiomedia-frontend.fly.dev` | Frontend public URL |
-| `REFLEX_CORS_ALLOWED_ORIGINS` | frontend URL | Allows the SPA's websocket/API calls |
+| `REFLEX_API_URL` | `https://audiomedia-backend.fly.dev` | Backend origin the SPA + uploads use (**stays fly.dev** even with a custom backend domain) |
+| `REFLEX_DEPLOY_URL` | custom or fly.dev frontend | Frontend public URL |
+| `REFLEX_CORS_ALLOWED_ORIGINS` | custom + fly.dev frontend | Allows the SPA's websocket/API calls from either origin |
 | `REFLEX_UPLOADED_FILES_DIR` | `/data/uploaded_files` | Uploaded audio + rendered video on the volume |
 | `HF_HOME` | `/data/hf-cache` | Whisper model cache on the volume (downloads once) |
-| `BACKEND_URL` / `FRONTEND_URL` / `GOOGLE_REDIRECT_URI` | backend/frontend URLs | Google OAuth flow |
+| `BACKEND_URL` / `FRONTEND_URL` / `GOOGLE_REDIRECT_URI` | custom or fly.dev URLs | OAuth + magic-link browser navigations |
+
+Deploy-time only (read by `deploy.sh`, not the app): `FRONTEND_DOMAIN`,
+`BACKEND_DOMAIN` — the custom domains (default to fly.dev). See **Custom domains**.
 
 Secrets (never in toml): `ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,

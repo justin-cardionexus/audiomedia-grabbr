@@ -10,7 +10,10 @@ primary_region = "syd"
   # Persistent storage (Fly volume mounted at /data)
   REFLEX_UPLOADED_FILES_DIR = "/data/uploaded_files"
   HF_HOME = "/data/hf-cache"
-  # URLs / CORS so the separate frontend can reach the backend + its media
+  # URLs / CORS so the separate frontend can reach the backend + its media.
+  # These fly.dev values are the FALLBACK for a bare `fly deploy`. deploy.sh
+  # overrides them via --env when FRONTEND_DOMAIN/BACKEND_DOMAIN are set
+  # (custom domains + multi-origin CORS).
   REFLEX_API_URL = "https://audiomedia-backend.fly.dev"
   REFLEX_DEPLOY_URL = "https://audiomedia-frontend.fly.dev"
   REFLEX_CORS_ALLOWED_ORIGINS = "https://audiomedia-frontend.fly.dev"

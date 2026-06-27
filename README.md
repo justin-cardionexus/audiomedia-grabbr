@@ -196,6 +196,9 @@ fly auth login
 ./deploy.sh
 ```
 
+Custom domains are supported via `FRONTEND_DOMAIN`/`BACKEND_DOMAIN` (CNAME'd to the
+fly.dev URLs); `deploy.sh` provisions the TLS certs. See [DEPLOY.md](DEPLOY.md).
+
 ---
 
 ## Notes & limitations
