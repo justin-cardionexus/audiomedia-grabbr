@@ -7,9 +7,10 @@ primary_region = "syd"
   dockerfile = "Dockerfile.backend"
 
 [env]
-  # Persistent storage (Fly volume mounted at /data)
-  REFLEX_UPLOADED_FILES_DIR = "/data/uploaded_files"
-  HF_HOME = "/data/hf-cache"
+  # Stateless machines: media lives in object storage, state in Redis. The
+  # whisper model cache is ephemeral (re-downloaded on a cold machine; bake it
+  # into the image later if cold-start latency matters).
+  HF_HOME = "/tmp/hf-cache"
   # URLs / CORS so the separate frontend can reach the backend + its media.
   # These fly.dev values are the FALLBACK for a bare `fly deploy`. deploy.sh
   # overrides them via --env when FRONTEND_DOMAIN/BACKEND_DOMAIN are set
@@ -24,20 +25,17 @@ primary_region = "syd"
 
 # Secrets set via `fly secrets set` (see deploy.sh): ANTHROPIC_API_KEY,
 # PEXELS_API_KEY, PIXABAY_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-# and DATABASE_URL (injected by `fly postgres attach`).
+# DATABASE_URL (via `fly postgres attach`), AWS_*/BUCKET_NAME/AWS_ENDPOINT_URL_S3
+# (via `fly storage create` — Tigris), and REDIS_URL (via `fly redis create`).
 
 [http_service]
   internal_port = 8000
   force_https = true
-  # Keep one machine always up: Reflex state is in-memory, the pipeline runs
-  # in-process, and the volume is single-attach.
-  auto_stop_machines = false
+  # Stateless backend (Redis state + object storage) → safe to run multiple
+  # machines / scale to zero. Bump min_machines_running for warm capacity.
+  auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 1
-
-[[mounts]]
-  source = "audiomedia_data"
-  destination = "/data"
 
 [[vm]]
   size = "shared-cpu-2x"

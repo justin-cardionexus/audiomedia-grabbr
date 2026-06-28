@@ -100,12 +100,26 @@ log "Attaching Postgres to $BACKEND (injects DATABASE_URL secret)"
 "$FLY" postgres attach "$DB_CLUSTER" --app "$BACKEND" --yes || \
   echo "   (attach reported an issue — it may already be attached; continuing)"
 
-# --- 3. Persistent volume (create if missing) ----------------------------
-if "$FLY" volumes list --app "$BACKEND" 2>/dev/null | grep -q "$VOLUME_NAME"; then
-  log "Volume '$VOLUME_NAME' already exists"
+# --- 3. Shared services: object storage (Tigris) + Redis -----------------
+# Media lives in object storage and state in Redis, so backend machines are
+# stateless and can scale horizontally (no single-attach volume). The CLI
+# surface for these varies by flyctl version — if a step needs attention,
+# provision it from the Fly dashboard and set the secrets (see DEPLOY.md),
+# then re-run. NOTE: these come from Fly provisioning, NOT from .env (your .env
+# holds the LOCAL MinIO/Redis values, which must not reach production).
+if "$FLY" secrets list --app "$BACKEND" 2>/dev/null | grep -q "BUCKET_NAME"; then
+  log "Object storage already configured on $BACKEND"
 else
-  log "Creating volume '$VOLUME_NAME' (${VOLUME_SIZE}GB) in $REGION"
-  "$FLY" volumes create "$VOLUME_NAME" --app "$BACKEND" --region "$REGION" --size "$VOLUME_SIZE" -y
+  log "Provisioning Tigris object storage for $BACKEND (sets AWS_*/BUCKET_NAME secrets)"
+  "$FLY" storage create --app "$BACKEND" --name "${PREFIX}-media" --yes 2>/dev/null || \
+    echo "   (provision Tigris manually: 'fly storage create --app $BACKEND'; see DEPLOY.md)"
+fi
+if "$FLY" secrets list --app "$BACKEND" 2>/dev/null | grep -q "REDIS_URL"; then
+  log "Redis already configured on $BACKEND"
+else
+  log "Redis not configured — provision Fly Redis and set REDIS_URL"
+  echo "   Run: fly redis create   then: fly secrets set --app $BACKEND REDIS_URL=<connection-url>"
+  echo "   (see DEPLOY.md — skipping automatic Redis provisioning)"
 fi
 
 # --- 4. Backend secrets from .env (already sourced above) -----------------

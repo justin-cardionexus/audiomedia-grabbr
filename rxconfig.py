@@ -23,11 +23,17 @@ def _db_url() -> str:
 
 DB_URL = _db_url()
 
+# Distributed state: when a Redis URL is present, Reflex switches from in-memory
+# to the Redis-backed state manager automatically, so multiple backend instances
+# share state. Bridge Fly Redis's `REDIS_URL` to Reflex's expected setting.
+REDIS_URL = os.environ.get("REFLEX_REDIS_URL") or os.environ.get("REDIS_URL") or None
+
 config = rx.Config(
     app_name="reflex_app",
     db_url=DB_URL,
     # psycopg v3 is async-capable, so it serves both sync and async engines.
     async_db_url=DB_URL if DB_URL.startswith("postgresql") else None,
+    redis_url=REDIS_URL,
     plugins=[
         rx.plugins.SitemapPlugin(),
         rx.plugins.TailwindV4Plugin(),

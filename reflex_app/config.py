@@ -73,6 +73,38 @@ SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() != "false"
 MAGIC_LINK_TTL_MINUTES = int(os.environ.get("MAGIC_LINK_TTL_MINUTES", "15"))
 
 
+# --- Object storage (S3-compatible: MinIO local, Tigris in prod) ---
+# AWS-standard names so Fly's Tigris integration (`fly storage create`) works
+# out of the box; the S3_* aliases are conveniences for non-Fly setups.
+def s3_bucket() -> str | None:
+    return os.environ.get("BUCKET_NAME") or os.environ.get("S3_BUCKET") or None
+
+
+def s3_endpoint_url() -> str | None:
+    return (
+        os.environ.get("AWS_ENDPOINT_URL_S3")
+        or os.environ.get("S3_ENDPOINT_URL")
+        or None
+    )
+
+
+def s3_access_key() -> str | None:
+    return os.environ.get("AWS_ACCESS_KEY_ID") or None
+
+
+def s3_secret_key() -> str | None:
+    return os.environ.get("AWS_SECRET_ACCESS_KEY") or None
+
+
+S3_REGION = os.environ.get("AWS_REGION") or os.environ.get("S3_REGION") or "auto"
+# How long presigned media URLs stay valid.
+PRESIGN_TTL_SECONDS = int(os.environ.get("PRESIGN_TTL_SECONDS", "3600"))
+
+
+def storage_enabled() -> bool:
+    return bool(s3_bucket() and s3_access_key() and s3_secret_key())
+
+
 # --- Transcription ---
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL_SIZE", "base")
 

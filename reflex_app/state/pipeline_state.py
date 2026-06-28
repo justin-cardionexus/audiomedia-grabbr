@@ -6,7 +6,9 @@ reflects the current state (see `load_project`).
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 
 import reflex as rx
 from reflex.utils.misc import run_in_thread
@@ -19,7 +21,7 @@ def _plog(msg: str) -> None:
 
 from ..models import AudioProject, MediaResult, Segment, Status
 from ..schemas import MediaVM, SegmentVM
-from ..services import llm, media_search, transcription, video_compose
+from ..services import llm, media_search, storage, transcription, video_compose
 from .base import AppState
 
 _STATUS_LABEL = {
@@ -64,6 +66,9 @@ class PipelineState(AppState):
     error: str = ""
     video_path: str = ""
     detail: str = ""
+    # Presigned media URLs (regenerated on each page load).
+    audio_url: str = ""
+    video_url: str = ""
     segments: list[SegmentVM] = []
 
     @rx.var
@@ -187,6 +192,10 @@ class PipelineState(AppState):
             self.transcript = p.transcript or ""
             self.error = p.error or ""
             self.video_path = p.video_path or ""
+        # Short-lived presigned URLs so the browser can load the media directly
+        # from object storage (works regardless of which instance served us).
+        self.audio_url = storage.presigned_url(self.stored_path) if self.stored_path else ""
+        self.video_url = storage.presigned_url(self.video_path) if self.video_path else ""
         self.segments = self._load_segments(project_id)
         self.progress = 100 if self.status == Status.COMPLETE else 0
 
@@ -201,7 +210,9 @@ class PipelineState(AppState):
             stored_path = project.stored_path
             media_type = project.media_type
             window_seconds = project.segment_seconds
-        audio_path = str(rx.get_upload_dir() / stored_path)
+        # Pull the audio object to a local temp file (any instance can do this).
+        ext = os.path.splitext(stored_path)[1] or ".bin"
+        audio_path = storage.download_to_temp(stored_path, suffix=ext)
         _plog(f"start project={project_id} media={media_type} window={window_seconds}s")
 
         try:
@@ -326,11 +337,22 @@ class PipelineState(AppState):
                         video_compose.SegmentMedia(start=s.start_sec, media=items)
                     )
 
+            # Render to a local temp file, then upload the result to storage.
             video_name = f"{stored_path.rsplit('.', 1)[0]}.final.mp4"
-            out_path = str(rx.get_upload_dir() / video_name)
-            await run_in_thread(
-                lambda: video_compose.compose(audio_path, seg_media, out_path)
-            )
+            out_fd, out_path = tempfile.mkstemp(suffix=".mp4", prefix="compose_out_")
+            os.close(out_fd)
+            try:
+                await run_in_thread(
+                    lambda: video_compose.compose(audio_path, seg_media, out_path)
+                )
+                await run_in_thread(
+                    lambda: storage.put_file(video_name, out_path, "video/mp4")
+                )
+            finally:
+                try:
+                    os.remove(out_path)
+                except OSError:
+                    pass
             with rx.session() as session:
                 p = session.get(AudioProject, project_id)
                 p.video_path = video_name
@@ -338,6 +360,7 @@ class PipelineState(AppState):
                 session.commit()
             async with self:
                 self.video_path = video_name
+                self.video_url = storage.presigned_url(video_name)
             _plog(f"composed -> {video_name}")
 
             async with self:
@@ -354,3 +377,9 @@ class PipelineState(AppState):
                 self.error = str(e)
                 self.detail = ""
             self._set_db_status(project_id, Status.ERROR, str(e))
+        finally:
+            # Clean up the downloaded audio temp file.
+            try:
+                os.remove(audio_path)
+            except OSError:
+                pass

@@ -4,11 +4,13 @@ version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.109.1",
+    "boto3>=1.43.36",
     "faster-whisper>=1.2.1",
     "imageio-ffmpeg>=0.6.0",
     "moviepy>=2.2.1",
     "psycopg[binary]>=3.3.4",
     "python-dotenv>=1.1.0",
+    "redis>=7.4.1",
     "reflex>=0.9.4",
     "reflex-local-auth>=0.5.0",
 ]

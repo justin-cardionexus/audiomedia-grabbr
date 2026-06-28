@@ -17,9 +17,9 @@ def project_page() -> rx.Component:
         rx.vstack(
             rx.heading(PipelineState.project_filename, size="7"),
             rx.cond(
-                PipelineState.stored_path != "",
+                PipelineState.audio_url != "",
                 rx.audio(
-                    src=rx.get_upload_url(PipelineState.stored_path),
+                    src=PipelineState.audio_url,
                     width="100%",
                     height="54px",
                 ),
@@ -44,7 +44,7 @@ def project_page() -> rx.Component:
                                 rx.icon("download", size=16),
                                 "Download video",
                                 on_click=rx.download(
-                                    url=rx.get_upload_url(PipelineState.video_path),
+                                    url=PipelineState.video_url,
                                     filename=PipelineState.video_download_name,
                                 ),
                                 variant="soft",
@@ -54,7 +54,7 @@ def project_page() -> rx.Component:
                             width="100%",
                         ),
                         rx.video(
-                            src=rx.get_upload_url(PipelineState.video_path),
+                            src=PipelineState.video_url,
                             width="100%",
                             height="480px",
                         ),

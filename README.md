@@ -93,12 +93,19 @@ uv sync                       # creates .venv from pyproject.toml + uv.lock
 # 3. Configure secrets
 cp .env.example .env          # then fill in your API keys (see below)
 
-# 4. Database (SQLite by default; migrations are committed under alembic/)
+# 4. Backing services: object storage (MinIO) + Redis (shared state)
+docker compose up -d          # MinIO + Redis + bucket init (see docker-compose.yml)
+
+# 5. Database (SQLite by default; migrations are committed under alembic/)
 uv run reflex db migrate
 
-# 5. Run it
+# 6. Run it
 uv run reflex run
 ```
+
+User media lives in object storage and session state in Redis (so the app runs
+multi-instance) — `docker compose up -d` provides local equivalents (MinIO + Redis)
+that the `.env` points at. MinIO console: http://localhost:9001.
 
 Then open **http://localhost:3000** (backend runs on `:8000`).
 

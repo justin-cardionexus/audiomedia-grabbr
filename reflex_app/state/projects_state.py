@@ -12,6 +12,7 @@ from sqlmodel import select
 from .. import config
 from ..models import AudioProject, MediaResult, Segment, Status
 from ..schemas import ProjectVM
+from ..services import storage
 from .base import AppState
 from .pipeline_state import PipelineState
 
@@ -123,14 +124,10 @@ class ProjectsState(AppState):
                 select(Segment).where(Segment.project_id == project_id)
             ).all():
                 session.delete(s)
-            # Remove on-disk files (original audio + rendered video).
-            upload_dir = rx.get_upload_dir()
-            for fn in (p.stored_path, p.video_path):
-                if fn:
-                    try:
-                        (upload_dir / fn).unlink(missing_ok=True)
-                    except OSError:
-                        pass
+            # Remove media objects from storage (original audio + rendered video).
+            for key in (p.stored_path, p.video_path):
+                if key:
+                    storage.delete(key)
             session.delete(p)
             session.commit()
         self.projects = self._query_projects()
@@ -181,14 +178,13 @@ class ProjectsState(AppState):
         ]
 
     def _persist_audio(self, data: bytes, filename: str) -> int:
-        """Write audio bytes to the upload dir and create an AudioProject row.
+        """Upload audio to object storage and create an AudioProject row.
 
         Returns the new project id. Shared by file upload and in-app recording.
+        The object key (`stored_path`) is what every instance uses to fetch it.
         """
-        upload_dir = rx.get_upload_dir()
-        upload_dir.mkdir(parents=True, exist_ok=True)
         stored_path = f"{self.user_id}__{uuid.uuid4().hex}__{filename}"
-        (upload_dir / stored_path).write_bytes(data)
+        storage.put_bytes(stored_path, data)
 
         with rx.session() as session:
             project = AudioProject(

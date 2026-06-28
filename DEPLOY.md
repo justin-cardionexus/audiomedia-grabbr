@@ -29,8 +29,19 @@ media from the backend origin.
   - `ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`
   - optional: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `HF_TOKEN`,
     `SMTP_HOSTNAME`/`SMTP_USERNAME`/`SMTP_PASSWORD` (passwordless email sign-in)
-  - `DATABASE_URL` is **not** needed here — Fly injects it when Postgres is attached.
-- Docker is **not** required locally; Fly builds the images remotely.
+  - `DATABASE_URL`, the `AWS_*`/`BUCKET_NAME` storage vars, and `REDIS_URL` are
+    **not** set here for production — Fly injects them when you attach Postgres /
+    Tigris / Redis. The `.env` `AWS_*`/`REDIS_URL` values are for **local dev**
+    (MinIO/Redis) and must **not** reach prod.
+- Docker is **not** required to deploy (Fly builds images remotely), but **is**
+  required for local development (MinIO + Redis via `docker compose`).
+
+### Shared services (multi-instance)
+
+The backend is **stateless** so it can run multiple machines: user media (audio +
+rendered video) lives in **object storage** (Tigris in prod, MinIO locally) and
+session state in **Redis** (Fly Redis in prod, a Redis container locally). No
+single-attach volume.
 
 ---
 
@@ -40,11 +51,11 @@ media from the backend origin.
 ./deploy.sh
 ```
 
-Defaults: prefix `audiomedia`, region `syd`, legacy Fly Postgres, a 10 GB volume.
-Override via env vars:
+Defaults: prefix `audiomedia`, region `syd`, legacy Fly Postgres. Override via env
+vars:
 
 ```bash
-PREFIX=myapp REGION=lhr VOLUME_SIZE=20 ORG=my-org ./deploy.sh
+PREFIX=myapp REGION=lhr ORG=my-org ./deploy.sh
 ```
 
 The script is **idempotent** — re-run it any time to redeploy.
@@ -54,18 +65,35 @@ The script is **idempotent** — re-run it any time to redeploy.
 1. Preflight: checks `flyctl`, login, and that `.env` exists.
 2. Creates the two apps if missing (`audiomedia-backend`, `audiomedia-frontend`).
 3. **Postgres**: creates a legacy Fly Postgres app `audiomedia-db` if missing
-   (`fly postgres create`), then `fly postgres attach` → injects `DATABASE_URL`
-   as a backend secret.
-4. **Volume**: creates `audiomedia_data` (mounted at `/data`) on the backend.
-5. **Secrets**: stages the keys from `.env` onto the backend
-   (`fly secrets set --stage`).
-6. **Backend deploy**: `fly deploy -c fly.backend.toml` (URLs/CORS passed via
-   `--env` so they track `PREFIX`). On boot the container runs
-   `reflex db migrate` then starts the backend.
-7. **Frontend deploy**: `fly deploy -c fly.frontend.toml` with
-   `--build-arg REFLEX_API_URL=https://audiomedia-backend.fly.dev` so the static
-   build targets the live backend.
+   (`fly postgres create`), then `fly postgres attach` → injects `DATABASE_URL`.
+4. **Object storage + Redis**: provisions **Tigris** (`fly storage create` → sets
+   `AWS_*`/`BUCKET_NAME`/`AWS_ENDPOINT_URL_S3` secrets) and points you to provision
+   **Fly Redis** (`fly redis create`, then set `REDIS_URL`). Both are skipped once
+   the secrets exist. *(These CLI commands vary by flyctl version — see below.)*
+5. **Secrets**: stages the API keys / SMTP creds from `.env` (storage + Redis come
+   from step 4, **not** `.env`).
+6. **Backend deploy**: `fly deploy -c fly.backend.toml` (URLs/CORS via `--env`). On
+   boot the container runs `reflex db migrate` then starts the backend.
+7. **Frontend deploy**: `fly deploy -c fly.frontend.toml` with the backend URL
+   baked in.
 8. Prints both URLs.
+
+#### Provisioning Tigris + Redis manually (if the CLI differs)
+
+```bash
+fly storage create --app audiomedia-backend          # Tigris → sets AWS_*/BUCKET_NAME
+fly redis create                                     # Upstash Redis → prints a URL
+fly secrets set --app audiomedia-backend REDIS_URL='redis://…'
+```
+
+### Local development (MinIO + Redis)
+
+```bash
+docker compose up -d           # MinIO (object storage) + Redis + bucket init
+# .env: the "Object storage" + "Redis" sections (localhost values)
+uv run reflex run
+```
+MinIO console: http://localhost:9001 (`minioadmin` / `minioadmin`).
 
 ---
 
@@ -163,8 +191,7 @@ custom domains). The values below are the fly.dev defaults:
 | `REFLEX_API_URL` | `https://audiomedia-backend.fly.dev` | Backend origin the SPA + uploads use (**stays fly.dev** even with a custom backend domain) |
 | `REFLEX_DEPLOY_URL` | custom or fly.dev frontend | Frontend public URL |
 | `REFLEX_CORS_ALLOWED_ORIGINS` | custom + fly.dev frontend | Allows the SPA's websocket/API calls from either origin |
-| `REFLEX_UPLOADED_FILES_DIR` | `/data/uploaded_files` | Uploaded audio + rendered video on the volume |
-| `HF_HOME` | `/data/hf-cache` | Whisper model cache on the volume (downloads once) |
+| `HF_HOME` | `/tmp/hf-cache` | Whisper model cache (ephemeral; re-downloads on a cold machine) |
 | `BACKEND_URL` / `FRONTEND_URL` / `GOOGLE_REDIRECT_URI` | custom or fly.dev URLs | OAuth + magic-link browser navigations |
 
 Deploy-time only (read by `deploy.sh`, not the app): `FRONTEND_DOMAIN`,
@@ -173,7 +200,9 @@ Deploy-time only (read by `deploy.sh`, not the app): `FRONTEND_DOMAIN`,
 Secrets (never in toml): `ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `SMTP_HOSTNAME`/`SMTP_USERNAME`/`SMTP_PASSWORD` (+ optional `SMTP_PORT`/`SMTP_FROM`/`SMTP_STARTTLS`),
-`DATABASE_URL` (auto via attach).
+`DATABASE_URL` (via `fly postgres attach`),
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_ENDPOINT_URL_S3`/`BUCKET_NAME`
+(via `fly storage create` — Tigris), and `REDIS_URL` (via `fly redis create`).
 
 ---
 
@@ -197,14 +226,16 @@ Secrets (never in toml): `ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `PIXABAY_API_KEY
 
 ---
 
-## Scaling notes (current limits)
+## Scaling
 
-The backend runs as a **single machine** (`min_machines_running=1`, no autostop):
-Reflex state is in-memory, the processing pipeline runs in-process, and the volume
-is single-attach. To scale horizontally you'd need:
+The backend is **horizontally scalable**: session state is shared via **Redis**
+(`REDIS_URL` → Reflex's Redis state manager) and all user media lives in **object
+storage** (Tigris), so any machine can serve any request. There's no single-attach
+volume. Scale with `fly scale count N --app audiomedia-backend` (or raise
+`min_machines_running`); machines also auto-start/stop on demand.
 
-- **Redis** for shared session state (`REFLEX_REDIS_URL`), and
-- **Object storage** (e.g. S3/Tigris) for uploads + rendered videos instead of a
-  local volume, with `get_upload_url` pointed at it.
-
-The frontend (static nginx) scales freely and is set to scale to zero when idle.
+Caveats: the processing pipeline still runs **in-process** on whichever machine
+received the upload event (fine — it reads/writes media via object storage, so the
+result is visible everywhere); the whisper model cache is per-machine and ephemeral
+(re-downloads on a cold machine — bake it into the image to avoid that). The
+frontend (static nginx) scales freely and can scale to zero when idle.
